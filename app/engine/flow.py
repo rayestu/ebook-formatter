@@ -85,6 +85,16 @@ def join_text(a: str, b: str, dehyphenate: bool = True) -> str:
     return a + " " + b
 
 
+DASH_RE = re.compile(r"(?<!-)\s*--\s*(?!-)")
+
+
+def normalize_dashes(text: str) -> str:
+    """Typewriter-convention double hyphens ("word -- word" or "word--word") become a proper
+    em dash, the way a typeset book renders them. A run of 3+ hyphens (a section divider) is
+    left alone."""
+    return DASH_RE.sub("\u2014", text)
+
+
 def styled(ln, page_index=0, note_nums=(), bold_ok=True, ital_ok=True):
     """Line text with footnote-ref markers and bold/italic markers substituted."""
     base = max(s[4] for s in ln.spans)
@@ -128,7 +138,7 @@ def styled(ln, page_index=0, note_nums=(), bold_ok=True, ital_ok=True):
             if int(m.group().translate(SUPDIG)) in note_nums else m.group(), text)
         text = BRACKET_REF_RE.sub(
             lambda m: f"{REF_OPEN}{page_index}:{m.group(1)}{REF_CLOSE}" if int(m.group(1)) in note_nums else m.group(0), text)
-    return text
+    return normalize_dashes(text)
 
 
 def _style_ok(page):
@@ -475,7 +485,7 @@ def build_page(page, kinds: dict, opts, body: float, skip_images=False) -> PageR
             if (x1 - x0) * (y1 - y0) > 0.8 * page_area and page.has_text:
                 continue                        # full-page scan background under OCR text
             cy = (y0 + y1) / 2 / page.height * 100
-            if cy < opts.top_pct or cy > 100 - opts.bottom_pct:
+            if cy < opts.top_for(page.index) or cy > 100 - opts.bottom_for(page.index):
                 continue
             if any(f[0] <= (x0 + x1) / 2 <= f[2] and f[1] <= (y0 + y1) / 2 <= f[3] for f in fig_boxes):
                 continue                        # already part of a figure picture

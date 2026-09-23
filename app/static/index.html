@@ -23,13 +23,26 @@
     <fieldset id="opts" disabled>
       <legend>Exclusion zones</legend>
       <label class="slider">
-        <span>Top margin <output id="topOut">6%</output></span>
+        <span id="topLabel">Top margin <output id="topOut">6%</output></span>
         <input id="top" type="range" min="0" max="15" step="0.5" value="6">
       </label>
       <label class="slider">
-        <span>Bottom margin <output id="bottomOut">6%</output></span>
+        <span id="bottomLabel">Bottom margin <output id="bottomOut">6%</output></span>
         <input id="bottom" type="range" min="0" max="15" step="0.5" value="6">
       </label>
+      <label class="toggle small">
+        <input id="oddEven" type="checkbox"><span>Odd/even pages have different margins</span>
+      </label>
+      <div id="evenZones" hidden>
+        <label class="slider">
+          <span>Top margin (even pages) <output id="topEvenOut">6%</output></span>
+          <input id="topEven" type="range" min="0" max="15" step="0.5" value="6">
+        </label>
+        <label class="slider">
+          <span>Bottom margin (even pages) <output id="bottomEvenOut">6%</output></span>
+          <input id="bottomEven" type="range" min="0" max="15" step="0.5" value="6">
+        </label>
+      </div>
 
       <legend class="second">Cleanup</legend>
       <label class="toggle"><input id="dehyphenate" type="checkbox" checked><span>De-hyphenation</span></label>

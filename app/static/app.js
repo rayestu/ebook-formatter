@@ -7,10 +7,18 @@ const KIND_LABEL = { header: "Header zone", footer: "Footer zone", pagenum: "Pag
 function opts() {
   return {
     top: +$("top").value, bottom: +$("bottom").value,
+    odd_even: $("oddEven").checked, top_even: +$("topEven").value, bottom_even: +$("bottomEven").value,
     dehyphenate: $("dehyphenate").checked, footnotes: $("footnotes").checked, chapters: $("chapters").checked,
   };
 }
 const qs = (o) => new URLSearchParams(o).toString();
+
+// the zone actually in effect for a given (1-based) page number, mirroring Options.top_for/bottom_for
+function zonesFor(pageNum1) {
+  const o = opts();
+  const even = o.odd_even && pageNum1 % 2 === 0;
+  return { top: even ? o.top_even : o.top, bottom: even ? o.bottom_even : o.bottom };
+}
 
 function say(msg, isErr) { const s = $("status"); s.textContent = msg; s.classList.toggle("error", !!isErr); }
 
@@ -74,6 +82,9 @@ function resetToUpload() {
   $("newBook").hidden = true;
   $("opts").disabled = true; $("convert").disabled = true;
   $("top").value = 6; $("bottom").value = 6; $("topOut").textContent = "6%"; $("bottomOut").textContent = "6%";
+  $("topEven").value = 6; $("bottomEven").value = 6; $("topEvenOut").textContent = "6%"; $("bottomEvenOut").textContent = "6%";
+  $("oddEven").checked = false; $("evenZones").hidden = true;
+  $("topLabel").firstChild.textContent = "Top margin "; $("bottomLabel").firstChild.textContent = "Bottom margin ";
   $("dehyphenate").checked = true; $("footnotes").checked = true; $("chapters").checked = true;
   $("prev").disabled = true; $("next").disabled = true;
   $("pageNum").value = 1; $("pageNum").disabled = true; $("pageCount").textContent = "/ –";
@@ -103,8 +114,9 @@ function schedule() { clearTimeout(st.timer); st.timer = setTimeout(refresh, 200
 function paintBands() {
   const o = $("orig"); if (!o.querySelector("img")) return;
   o.querySelectorAll(".band").forEach((b) => b.remove());
-  for (const [cls, v] of [["t", $("top").value], ["b", $("bottom").value]]) {
-    if (+v <= 0) continue;
+  const z = zonesFor(st.page + 1);
+  for (const [cls, v] of [["t", z.top], ["b", z.bottom]]) {
+    if (v <= 0) continue;
     const d = document.createElement("div"); d.className = "band " + cls; d.style.height = v + "%"; o.appendChild(d);
   }
 }
@@ -166,8 +178,21 @@ $("clean").addEventListener("click", (e) => {      // keep footnote links inside
   if (t) t.scrollIntoView({ block: "center" });
 });
 
-for (const id of ["top", "bottom"]) $(id).addEventListener("input", () => { $(id + "Out").textContent = $(id).value + "%"; schedule(); });
+for (const id of ["top", "bottom", "topEven", "bottomEven"])
+  $(id).addEventListener("input", () => { $(id + "Out").textContent = $(id).value + "%"; schedule(); });
 for (const id of ["dehyphenate", "footnotes", "chapters"]) $(id).addEventListener("change", schedule);
+
+$("oddEven").addEventListener("change", () => {
+  const on = $("oddEven").checked;
+  $("evenZones").hidden = !on;
+  $("topLabel").firstChild.textContent = on ? "Top margin (odd pages) " : "Top margin ";
+  $("bottomLabel").firstChild.textContent = on ? "Bottom margin (odd pages) " : "Bottom margin ";
+  if (on) {   // starting the split from whatever the single zone was set to, not back to 6%/6%
+    $("topEven").value = $("top").value; $("topEvenOut").textContent = $("top").value + "%";
+    $("bottomEven").value = $("bottom").value; $("bottomEvenOut").textContent = $("bottom").value + "%";
+  }
+  schedule();
+});
 
 // ---------- convert (modal) ----------
 const modal = $("modal");

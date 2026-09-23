@@ -46,8 +46,7 @@ is supposed to work.
 
 ## Screenshot
 
-*(Run it locally and drop a PDF in — the left panel has the controls, the right panel
-shows the original page next to the cleaned preview.)*
+![Left panel has the margin sliders, an odd/even margin split, and cleanup toggles; the right panel shows the original PDF page next to the cleaned-up preview, with stripped header/footer text highlighted in red.](docs/screenshot.webp)
 
 ## Requirements
 

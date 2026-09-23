@@ -45,21 +45,15 @@ class RunningKeys:
     def __init__(self, pages):
         self.n = len(pages)
         self.seen = {}                               # (band, key, ybucket) -> [page indexes]
-        self.pages_of = {}                           # (band, key) -> {page indexes}
         for p in pages:
             for l in p.lines:
                 band = _band(l, p)
                 if band and len(l.text.strip()) > 1:
                     key = norm_key(l.text)
-                    self.pages_of.setdefault((band, key), set()).add(p.index)
                     if re.search(r"[^\W\d_]{3}", key):
                         yb = round((l.bbox[1] + l.bbox[3]) / 2 / p.height * 100 / 2)
                         self.seen.setdefault((band, key, yb), []).append(p.index)
         self.need = max(3, int(0.3 * self.n + 0.5)) if self.n >= 3 else 99
-
-    def repeats(self, band, key):
-        """Does this exact (digit-masked) text also occur in the same band on another page?"""
-        return len(self.pages_of.get((band, key), ())) >= 2
 
     def hit(self, band, key, yb):
         idx = sorted({i for d in (-1, 0, 1) for i in self.seen.get((band, key, yb + d), [])})
@@ -72,21 +66,43 @@ def running_keys(pages):
     return RunningKeys(pages)
 
 
-def _continues_body(page, ln, body, direction):
-    """True if `ln` is a normal-size text line sitting flush against body text on its inner side
-    (next line below for a header-zone line, previous line above for a footer-zone line):
-    then it is the first/last line of the body, not a header."""
+def _is_heading_sized(ln, body):
+    """A line distinctly larger than body text (the same threshold flow.py uses for headings):
+    a real, one-off heading, not page furniture, so the margin sliders leave it alone."""
+    return bool(body) and ln.size >= 1.15 * body
+
+
+def _flush_neighbor(page, anchor, direction):
+    """The line immediately touching `anchor` on its `direction` side (below if +1, above if -1):
+    same size, small gap, clearly overlapping horizontally -- i.e. the next/previous line of the
+    same paragraph. None if there isn't one."""
+    for o in page.lines:
+        if o is anchor or abs(o.size - anchor.size) > 0.6:
+            continue
+        gap = (o.bbox[1] - anchor.bbox[3]) if direction > 0 else (anchor.bbox[1] - o.bbox[3])
+        overlap = min(o.bbox[2], anchor.bbox[2]) - max(o.bbox[0], anchor.bbox[0])
+        if -0.3 * anchor.size <= gap < 0.45 * anchor.size \
+                and overlap > 0.5 * min(o.bbox[2] - o.bbox[0], anchor.bbox[2] - anchor.bbox[0]) \
+                and abs(o.bbox[0] - anchor.bbox[0]) < 3 * anchor.size:
+            return o
+    return None
+
+
+def _continues_body(page, ln, body, direction, zone_edge):
+    """True if `ln` is the first/last line of a real paragraph that mostly lives outside the strip
+    zone, so the margin sliders should leave it alone. That takes two things: a flush neighbor
+    that is itself past `zone_edge` (the slider boundary -- two stacked header lines of the same
+    size must not protect each other), and that neighbor having a flush neighbor of its own, so a
+    single stray junk line just outside the zone can't falsely protect the line before it either."""
     if abs(ln.size - body) > 0.6 or len(ln.text.strip()) < 25:
         return False
-    for o in page.lines:
-        if o is ln or abs(o.size - ln.size) > 0.6:
-            continue
-        gap = (o.bbox[1] - ln.bbox[3]) if direction > 0 else (ln.bbox[1] - o.bbox[3])
-        overlap = min(o.bbox[2], ln.bbox[2]) - max(o.bbox[0], ln.bbox[0])
-        if -0.3 * ln.size <= gap < 0.45 * ln.size and overlap > 0.5 * min(o.bbox[2] - o.bbox[0], ln.bbox[2] - ln.bbox[0]) \
-                and abs(o.bbox[0] - ln.bbox[0]) < 3 * ln.size:
-            return True
-    return False
+    o1 = _flush_neighbor(page, ln, direction)
+    if o1 is None:
+        return False
+    o1_cy = (o1.bbox[1] + o1.bbox[3]) / 2 / page.height * 100
+    if (direction > 0 and o1_cy < zone_edge) or (direction < 0 and o1_cy > zone_edge):
+        return False                            # neighbor is still inside the zone itself
+    return _flush_neighbor(page, o1, direction) is not None
 
 
 def classify(pages, opts: Options, rkeys=None, body=None) -> dict:
@@ -103,12 +119,13 @@ def classify(pages, opts: Options, rkeys=None, body=None) -> dict:
                 m[i] = "pagenum"
             elif band and rkeys.hit(band, norm_key(ln.text), round(cy / 2)):
                 m[i] = "running"
-            elif cy < opts.top_pct:
-                # text seen only once is a heading / body line, not a running header: keep it
-                if rkeys.repeats("top", norm_key(ln.text)) and not _continues_body(p, ln, body, +1):
+            elif cy < opts.top_for(p.index):
+                # the slider is a deliberate "cut this zone" instruction: strip whatever is in it,
+                # except a distinctly larger heading or a paragraph's first line poking into the zone
+                if not _is_heading_sized(ln, body) and not _continues_body(p, ln, body, +1, opts.top_for(p.index)):
                     m[i] = "header"
-            elif cy > 100 - opts.bottom_pct:
-                if rkeys.repeats("bottom", norm_key(ln.text)) and not _continues_body(p, ln, body, -1):
+            elif cy > 100 - opts.bottom_for(p.index):
+                if not _is_heading_sized(ln, body) and not _continues_body(p, ln, body, -1, 100 - opts.bottom_for(p.index)):
                     m[i] = "footer"
         pn_rows = [(p.lines[i].bbox[1] + p.lines[i].bbox[3]) / 2 for i, k in m.items() if k == "pagenum"]
         for i, ln in enumerate(p.lines):

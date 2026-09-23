@@ -27,6 +27,29 @@ def html_of(session, n, **kw):
     return session.preview(n, Options(**kw), lambda x: f"/img/{x}")
 
 
+def test_normalize_dashes():
+    from app.engine.flow import normalize_dashes
+    assert normalize_dashes("Chinese -- the industry") == "Chinese—the industry"
+    assert normalize_dashes("word--word") == "word—word"
+    assert normalize_dashes("a--b--c") == "a—b—c"
+    assert normalize_dashes("-----") == "-----"                # a divider, not a dash: left alone
+    assert normalize_dashes("range 10-20") == "range 10-20"     # a single hyphen: left alone
+
+
+def test_double_hyphen_in_pdf_becomes_em_dash(tmp_path):
+    import pymupdf
+    p = tmp_path / "dash.pdf"
+    doc = pymupdf.open()
+    pg = doc.new_page(width=420, height=600)
+    pg.insert_text((50, 100), "Chinese -- the industry does well of course.", fontsize=11)
+    pg.insert_text((50, 300), "A section divider follows.", fontsize=11)
+    pg.insert_text((50, 320), "-----", fontsize=11)
+    doc.save(p)
+    h = html_of(PdfSession(p), 0)["html"]
+    assert "Chinese—the industry" in h
+    assert "-----" in h                                          # the divider survives untouched
+
+
 def test_join_text_dehyphenation():
     assert join_text("we con-", "vert it") == "we convert it"
     assert join_text("the Anglo-", "Saxon era") == "the Anglo-Saxon era"
@@ -42,10 +65,74 @@ def test_header_pagenum_stripped(session):
     assert "The Sample Book" not in r["html"]
 
 
-def test_slider_zone_only_strips_repeating_text(session):
-    # "Chapter One" appears once (page 1): a heading, not a running header -> kept even inside the zone
+def test_options_top_for_bottom_for():
+    o = Options(top_pct=4, bottom_pct=5, odd_even=False, top_pct_even=9, bottom_pct_even=10)
+    for idx in range(6):                                     # odd_even off: every page uses the first set
+        assert o.top_for(idx) == 4 and o.bottom_for(idx) == 5
+    o2 = Options(top_pct=4, bottom_pct=5, odd_even=True, top_pct_even=9, bottom_pct_even=10)
+    assert o2.top_for(0) == 4 and o2.bottom_for(0) == 5          # page 1 (index 0): odd -> first set
+    assert o2.top_for(1) == 9 and o2.bottom_for(1) == 10         # page 2 (index 1): even -> second set
+    assert o2.top_for(2) == 4 and o2.top_for(3) == 9
+
+
+def test_options_from_dict_odd_even():
+    o = Options.from_dict({"top": 3, "bottom": 4, "odd_even": "true", "top_even": 11, "bottom_even": 12})
+    assert o.odd_even is True and o.top_pct == 3 and o.top_pct_even == 11 and o.bottom_pct_even == 12
+    # not supplying the even-page fields defaults them to the odd/first set, not 6/6
+    o2 = Options.from_dict({"top": 8, "bottom": 2, "odd_even": True})
+    assert o2.top_pct_even == 8 and o2.bottom_pct_even == 2
+    assert Options.from_dict({}).odd_even is False
+
+
+def test_odd_even_margins_strip_different_zones(tmp_path):
+    import pymupdf
+    p = tmp_path / "oe.pdf"
+    doc = pymupdf.open()
+    words = ["Alpha", "Bravo", "Charlie", "Delta"]             # different wording each page: not a repeating
+    for n in range(4):                                        # running header, so only the slider zone matters
+        pg = doc.new_page(width=420, height=600)
+        pg.insert_text((150, 40), f"{words[n]} outer margin note", fontsize=9)     # ~7% down: a 10%+ zone reaches it
+        pg.insert_text((50, 110), f"Body text on page {n} continues normally here and here.", fontsize=11)
+        pg.insert_text((50, 124), "and this is the second line of the same ordinary paragraph.", fontsize=11)
+    doc.save(p)
+    s = PdfSession(p)
+    for n in range(4):                                        # odd_even off: 4% misses the note on every page
+        assert f"{words[n]} outer margin" in html_of(s, n, top_pct=4)["html"]
+
+    split = Options(top_pct=4, bottom_pct=4, odd_even=True, top_pct_even=10, bottom_pct_even=4)
+    r0 = s.preview(0, split, lambda x: "")                    # page 1 (odd): still uses 4% -> kept
+    r1 = s.preview(1, split, lambda x: "")                    # page 2 (even): uses 10% -> stripped
+    assert "Alpha outer margin" in r0["html"]
+    assert "Bravo outer margin" not in r1["html"]
+    assert "Body text on page 1" in r1["html"]                 # body itself is untouched
+
+
+def test_slider_zone_keeps_a_real_heading(session):
+    # "Chapter One" is set much larger than body text -> a real heading, kept even inside the zone
     r = html_of(session, 0, top_pct=15)
     assert "Chapter One" in r["html"] and not any("Chapter One" in x["text"] for x in r["regions"])
+
+
+def test_slider_zone_strips_a_one_off_body_sized_title_block(tmp_path):
+    """A title/letterhead block that appears on page 1 only (no repeats, e.g. a single-document PDF
+    with no other pages to compare against) and is set in the same size as body text must still be
+    stripped once the slider is dragged over it -- the slider is a direct "cut this zone" instruction,
+    not gated on repetition."""
+    import pymupdf
+    p = tmp_path / "letterhead.pdf"
+    doc = pymupdf.open()
+    pg = doc.new_page(width=420, height=600)
+    pg.insert_text((90, 40), "SPEECH BY THE PRIME MINISTER,", fontsize=10.5)
+    pg.insert_text((90, 54), "DURING THE DEBATE ON 27TH MAY.", fontsize=10.5)
+    pg.insert_text((50, 120), "Mr Speaker, Sir, with the formal opening of this session", fontsize=10.5)
+    pg.insert_text((50, 134), "we open a new chapter and continue in the ordinary way.", fontsize=10.5)
+    doc.save(p)
+    s = PdfSession(p)
+    assert "SPEECH BY" in html_of(s, 0, top_pct=0)["html"]
+    r = html_of(s, 0, top_pct=15)
+    assert "SPEECH BY" not in r["html"] and "DURING THE DEBATE" not in r["html"]
+    assert "Mr Speaker" in r["html"]                                  # body text below is untouched
+    assert any(x["kind"] == "header" for x in r["regions"])
 
 
 def test_slider_zone_strips_text_seen_on_other_pages(tmp_path):
