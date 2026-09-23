@@ -1,6 +1,6 @@
 # ebook-formatter
 
-Turn a PDF book into a clean, reflowable EPUB that actually reads well on an e-reader
+Turn a PDF file into a clean, reflowable EPUB that actually reads well on an e-reader
 (Kindle, Kobo, Apple Books, and so on) — instead of the tiny, unzoomable, page-locked
 mess you get from just renaming a PDF to `.epub`.
 
