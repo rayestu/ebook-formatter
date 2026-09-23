@@ -9,6 +9,8 @@ an EPUB with running headers/footers and page numbers stripped, hyphenation and 
 breaks cleaned up, footnotes turned into linked chapter endnotes, and a proper table of
 contents. Everything runs locally — no file ever leaves your machine.
 
+> **Try it online:** You can use the web version directly at [pdf2ereader.vercel.app](https://pdf2ereader.vercel.app/).
+
 ## Why
 
 Most "PDF to EPUB" converters either shell out to Calibre and keep every page-layout
@@ -55,6 +57,12 @@ is supposed to work.
 
 ## Quickstart
 
+### Hosted Web App
+
+Access the live version directly in your browser: [https://pdf2ereader.vercel.app/](https://pdf2ereader.vercel.app/)
+
+### Local Setup
+
 ```bash
 git clone https://github.com/rayestu/ebook-formatter.git
 cd ebook-formatter
@@ -74,19 +82,19 @@ Upload a PDF, adjust the margin sliders and toggles while watching the preview, 
 
 ```
 app/
-  main.py              FastAPI app: upload, preview, convert, download
+  main.py           FastAPI app: upload, preview, convert, download
   engine/
-    extract.py         Per-page text/image/vector-drawing extraction (PyMuPDF)
-    classify.py         Header/footer/page-number/running-head detection
-    flow.py             Paragraph merging, de-hyphenation, columns, lists,
-                         tables, figures, pull quotes, cross-page joins
-    footnotes.py         Footnote marker & note detection
-    toc.py               Table of contents (bookmarks + visual fallback)
-    build_html.py        Paragraph stream -> chapter XHTML
-    epub.py               EPUB packaging (ebooklib)
-    pipeline.py           Orchestrates it all; used by both the preview and
-                          the final conversion
-  static/               Vanilla HTML/CSS/JS frontend, no build step
+    extract.py      Per-page text/image/vector-drawing extraction (PyMuPDF)
+    classify.py     Header/footer/page-number/running-head detection
+    flow.py         Paragraph merging, de-hyphenation, columns, lists,
+                    tables, figures, pull quotes, cross-page joins
+    footnotes.py    Footnote marker & note detection
+    toc.py          Table of contents (bookmarks + visual fallback)
+    build_html.py   Paragraph stream -> chapter XHTML
+    epub.py         EPUB packaging (ebooklib)
+    pipeline.py     Orchestrates it all; used by both the preview and
+                    the final conversion
+  static/           Vanilla HTML/CSS/JS frontend, no build step
 ```
 
 Built with [PyMuPDF](https://pymupdf.readthedocs.io/) for PDF structure extraction,
@@ -105,6 +113,10 @@ cross-page merges, footnotes, glossaries, lists, two-column layouts, tables, rot
 figures, and table-of-contents extraction, then validates the resulting EPUBs
 (structure, manifest, internal links) end to end.
 
+## Contributing
+
+This project is fully open source under the MIT license, and contributions are welcome! Feel free to open issues, submit pull requests, or suggest new features to help improve the tool.
+
 ## License
 
-MIT
+[MIT](LICENSE)
