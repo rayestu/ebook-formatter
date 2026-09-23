@@ -92,5 +92,13 @@ dialog h2 { margin: 0 0 12px; font-size: 18px; }
 dialog .log { margin-top: 10px; min-height: 120px; max-height: 240px; }
 .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; flex-wrap: wrap; }
 .actions [hidden] { display: none; }
-.linkbtn { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 7px 12px; text-decoration: none; }
+.linkbtn { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 7px 12px; text-decoration: none; cursor: pointer; }
 .linkbtn:hover { border-color: var(--accent); }
+#newBook { align-self: flex-start; font-size: 12.5px; padding: 5px 10px; margin-top: -4px; }
+
+#loadModal { width: min(340px, 92vw); text-align: center; }
+#loadModal h2 { font-size: 16px; }
+.spinner { width: 34px; height: 34px; margin: 4px auto 16px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent); animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#loadModal .status { margin: 0; }
+#loadModal .actions { justify-content: center; }

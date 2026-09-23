@@ -18,6 +18,7 @@
       <input id="file" type="file" accept="application/pdf,.pdf" hidden>
     </div>
     <p id="docInfo" class="info" hidden></p>
+    <button id="newBook" class="linkbtn" hidden>↻ Load a different book</button>
 
     <fieldset id="opts" disabled>
       <legend>Exclusion zones</legend>
@@ -59,6 +60,15 @@
     </div>
   </main>
 </div>
+
+<dialog id="loadModal" aria-labelledby="loadTitle">
+  <h2 id="loadTitle">Reading PDF…</h2>
+  <div class="spinner" aria-hidden="true"></div>
+  <p id="loadStatus" class="status" role="status">Starting…</p>
+  <div class="actions">
+    <button id="loadClose" class="primary" hidden>Close</button>
+  </div>
+</dialog>
 
 <dialog id="modal" aria-labelledby="mTitle">
   <h2 id="mTitle">Converting…</h2>

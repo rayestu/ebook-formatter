@@ -1,6 +1,6 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
-const st = { id: null, page: 0, pages: 0, req: 0, timer: null, poll: null };
+const st = { id: null, page: 0, pages: 0, req: 0, timer: null, poll: null, uploadToken: 0 };
 
 const KIND_LABEL = { header: "Header zone", footer: "Footer zone", pagenum: "Page number", running: "Running header/footer", footnote: "Footnote (moved to endnotes)", figure: "Figure (kept as an image)" };
 
@@ -15,28 +15,77 @@ const qs = (o) => new URLSearchParams(o).toString();
 function say(msg, isErr) { const s = $("status"); s.textContent = msg; s.classList.toggle("error", !!isErr); }
 
 // ---------- upload ----------
+const loadModal = $("loadModal");
+$("loadClose").onclick = () => loadModal.close();
+loadModal.addEventListener("cancel", (e) => e.preventDefault());   // Esc can't dismiss while reading
+
 async function upload(file) {
   if (!file) return;
   if (!/\.pdf$/i.test(file.name) && file.type !== "application/pdf") { say("Please choose a PDF file.", true); return; }
-  say(`Reading ${file.name} …`);
+  const my = ++st.uploadToken;
+
   $("dropTitle").textContent = file.name;
+  $("loadTitle").textContent = "Reading PDF…";
+  $("loadStatus").textContent = `Analyzing ${file.name} — this can take a while for long books.`;
+  $("loadStatus").classList.remove("error");
+  $("loadClose").hidden = true;
+  if (!loadModal.open) loadModal.showModal();
+  say(`Reading ${file.name} …`);
+
   const fd = new FormData(); fd.append("file", file);
   try {
     const r = await fetch("/api/upload", { method: "POST", body: fd });
     const j = await r.json();
+    if (my !== st.uploadToken) return;          // superseded by a newer upload or a reset
     if (!r.ok) throw new Error(j.detail || r.statusText);
     Object.assign(st, { id: j.doc_id, pages: j.pages, page: 0 });
     $("docInfo").hidden = false;
     $("docInfo").textContent = `${j.pages} pages · TOC: ${{ bookmarks: "PDF bookmarks", visual: "contents page", none: "none found" }[j.toc_source]}` +
       (j.text_pages < j.pages ? ` · ${j.pages - j.text_pages} page(s) without text` : "") +
       (j.repaired ? " · ⚠ damaged file was repaired; some content may be missing" : "");
+    $("newBook").hidden = false;
     $("opts").disabled = false; $("convert").disabled = false;
     $("download").hidden = true; $("log").textContent = ""; $("bar").style.width = "0";
     $("pageNum").max = j.pages; $("pageCount").textContent = `/ ${j.pages}`;
     say("Ready. Adjust settings, check the preview, then convert.");
+    loadModal.close();
     refresh();
-  } catch (e) { say("Upload failed: " + e.message, true); }
+  } catch (e) {
+    if (my !== st.uploadToken) return;
+    say("Upload failed: " + e.message, true);
+    $("loadTitle").textContent = "Could not read that PDF";
+    $("loadStatus").textContent = e.message;
+    $("loadStatus").classList.add("error");
+    $("loadClose").hidden = false;
+  }
 }
+
+function resetToUpload() {
+  const old = st.id;
+  st.uploadToken = (st.uploadToken || 0) + 1;    // ignore any in-flight upload/preview response
+  st.req++;
+  clearTimeout(st.timer);
+  Object.assign(st, { id: null, page: 0, pages: 0 });
+  if (old) fetch(`/api/${old}`, { method: "DELETE" }).catch(() => {});   // best-effort; frees server memory sooner
+
+  $("dropTitle").textContent = "Drop a PDF here"; $("dropSub").textContent = "or click to browse";
+  fileIn.value = "";
+  $("docInfo").hidden = true; $("docInfo").textContent = "";
+  $("newBook").hidden = true;
+  $("opts").disabled = true; $("convert").disabled = true;
+  $("top").value = 6; $("bottom").value = 6; $("topOut").textContent = "6%"; $("bottomOut").textContent = "6%";
+  $("dehyphenate").checked = true; $("footnotes").checked = true; $("chapters").checked = true;
+  $("prev").disabled = true; $("next").disabled = true;
+  $("pageNum").value = 1; $("pageNum").disabled = true; $("pageCount").textContent = "/ –";
+  const o = $("orig"); o.classList.add("empty"); o.textContent = "No document loaded";
+  o.querySelectorAll(".hl, .band").forEach((n) => n.remove());
+  const c = $("clean"); c.classList.add("empty"); c.textContent = "No document loaded";
+  $("warn").textContent = "";
+  $("download").hidden = true; $("log").textContent = ""; $("bar").style.width = "0";
+  say("Choose a PDF to begin.");
+  fileIn.click();
+}
+$("newBook").onclick = resetToUpload;
 
 const drop = $("drop"), fileIn = $("file");
 drop.addEventListener("click", () => fileIn.click());

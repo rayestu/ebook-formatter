@@ -34,22 +34,28 @@ def _session(doc_id: str) -> PdfSession:
     return s
 
 
+def _release(doc_id: str) -> bool:
+    """Free one document's open file handle, caches and temp files. False if it's mid-conversion."""
+    old = SESSIONS.get(doc_id)
+    if not old or old.job["state"] == "running":
+        return False
+    del SESSIONS[doc_id]
+    try:
+        with old.lock:
+            old.doc.close()
+    except Exception:
+        pass
+    for suffix in (".pdf", ".epub"):
+        (WORK / f"{doc_id}{suffix}").unlink(missing_ok=True)
+    return True
+
+
 def _evict():
-    """Release the oldest documents (open file handle, caches, temp files) beyond MAX_SESSIONS."""
+    """Release the oldest documents beyond MAX_SESSIONS."""
     for old_id in list(SESSIONS):
         if len(SESSIONS) <= MAX_SESSIONS:
             break
-        old = SESSIONS[old_id]
-        if old.job["state"] == "running":
-            continue
-        del SESSIONS[old_id]
-        try:
-            with old.lock:
-                old.doc.close()
-        except Exception:
-            pass
-        for suffix in (".pdf", ".epub"):
-            (WORK / f"{old_id}{suffix}").unlink(missing_ok=True)
+        _release(old_id)
 
 
 def _deliver(s: PdfSession, epub: Path) -> Path:
@@ -101,6 +107,16 @@ def upload(file: UploadFile = File(...)):
     SESSIONS[doc_id] = session
     _evict()
     return {"doc_id": doc_id, **session.info()}
+
+
+@app.delete("/api/{doc_id}")
+def delete_document(doc_id: str):
+    """The user is loading a different book; free this one's memory right away instead of waiting
+    for LRU eviction. A no-op (200) if it's already gone or mid-conversion, so the frontend can
+    fire this without checking first."""
+    if doc_id in SESSIONS:
+        _release(doc_id)
+    return {"ok": True}
 
 
 @app.get("/api/{doc_id}/page/{n}/image")

@@ -481,6 +481,29 @@ def test_session_eviction(pdf):
     assert c.get(f"/api/{ids[0]}/status").status_code == 404
 
 
+def test_delete_document_frees_it_and_is_idempotent(pdf, tmp_path, monkeypatch):
+    monkeypatch.setenv("PDF2EPUB_OUT_DIR", str(tmp_path))
+    monkeypatch.setenv("PDF2EPUB_NO_REVEAL", "1")
+    from app.main import app
+    c = TestClient(app)
+    i = c.post("/api/upload", files={"file": ("a.pdf", pdf.read_bytes(), "application/pdf")}).json()["doc_id"]
+    assert c.get(f"/api/{i}/status").status_code == 200
+    assert c.delete(f"/api/{i}").status_code == 200
+    assert c.get(f"/api/{i}/status").status_code == 404           # gone
+    assert c.delete(f"/api/{i}").status_code == 200                # deleting again, or an unknown id, is a no-op
+    assert c.delete("/api/unknown12345").status_code == 200
+
+    j = c.post("/api/upload", files={"file": ("b.pdf", pdf.read_bytes(), "application/pdf")}).json()["doc_id"]
+    c.post(f"/api/{j}/convert", json={})
+    assert c.delete(f"/api/{j}").status_code == 200                # never deletes mid-conversion
+    import time
+    for _ in range(50):
+        if c.get(f"/api/{j}/status").json()["state"] in ("done", "error"):
+            break
+        time.sleep(0.05)
+    assert c.get(f"/api/{j}/status").status_code == 200            # still present: convert wasn't interrupted
+
+
 def _two_col_pdf(path, top_line_y=None):
     import pymupdf
     doc = pymupdf.open()
