@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.DS_Store
+*.epub
+*.pdf
+!tests/**/*.pdf
+node_modules/
+.wrangler/
